@@ -148,17 +148,17 @@ describe('Templates.js', function() {
             });
         });
     });
-    describe('getReposFromProviders(providers)', function() {
+    describe('getReposFromExtensions(extensions)', function() {
         const tests = {
-            'invalid provider: string': {
+            'invalid extension: string': {
                 input: ['string'],
                 output: [],
             },
-            'invalid provider: empty obj': {
+            'invalid extension: empty obj': {
                 input: [{}],
                 output: [],
             },
-            'provider provides non-array': {
+            'extension provides non-array': {
                 input: [{
                     getRepositories() {
                         return 'should be array';
@@ -166,7 +166,7 @@ describe('Templates.js', function() {
                 }],
                 output: [],
             },
-            'provider provides a repo with URL': {
+            'extension provides a repo with URL': {
                 input: [{
                     getRepositories() {
                         return [{
@@ -184,7 +184,7 @@ describe('Templates.js', function() {
         for (const [testName, test] of Object.entries(tests)) {
             describe(testName, function() {
                 it(`returns the expected repos`, async function() {
-                    const output = await Templates.getReposFromProviders(test.input);
+                    const output = await Templates.getReposFromExtensions(test.input);
                     output.should.deep.equal(test.output);
                 });
             });
@@ -234,32 +234,32 @@ describe('Templates.js', function() {
             });
         });
         describe('(<defaultRepoList>)', function() {
-            describe('when we have no providers', function() {
+            describe('when we have no extensions', function() {
                 it('returns the default Codewind templates', async function() {
                     const templateController = new Templates('');
                     const output = await templateController.getTemplatesFromRepos(defaultRepoList);
                     output.should.deep.equal(defaultCodewindTemplates);
                 });
             });
-            describe(`when providers don't provide repo lists`, function() {
+            describe(`when extensions don't provide repo lists`, function() {
                 let templateController;
                 before(() => {
                     templateController = new Templates('');
-                    templateController.addProvider('should provide array', {
+                    templateController.addExtension('should provide array', {
                         getRepositories() { return 'should be array'; },
                     });
                 });
-                it('still returns the default Codewind templates (ignoring the invalid providers)', async function() {
+                it('still returns the default Codewind templates (ignoring the invalid extensions)', async function() {
                     const output = await templateController.getTemplatesFromRepos(defaultRepoList);
                     output.should.deep.equal(defaultCodewindTemplates);
                 });
             });
-            describe('when providers list invalid repos', function() {
+            describe('when extensions list invalid repos', function() {
                 describe('wrong type', function() {
                     let templateController;
                     before(() => {
                         templateController = new Templates('');
-                        templateController.addProvider('wrong type', {
+                        templateController.addExtension('wrong type', {
                             getRepositories() { return ['should be object']; },
                         });
                     });
@@ -272,7 +272,7 @@ describe('Templates.js', function() {
                     let templateController;
                     before(() => {
                         templateController = new Templates('');
-                        templateController.addProvider('missing URL', {
+                        templateController.addExtension('missing URL', {
                             getRepositories() {
                                 return [{ description: 'missing URL' }];
                             },
@@ -287,7 +287,7 @@ describe('Templates.js', function() {
                     let templateController;
                     before(() => {
                         templateController = new Templates('');
-                        templateController.addProvider('invalid URL', {
+                        templateController.addExtension('invalid URL', {
                             getRepositories() {
                                 return [{
                                     description: 'invalid URL',
@@ -305,7 +305,7 @@ describe('Templates.js', function() {
                     let templateController;
                     before(() => {
                         templateController = new Templates('');
-                        templateController.addProvider('duplicate URL', {
+                        templateController.addExtension('duplicate URL', {
                             getRepositories() {
                                 return [{
                                     description: 'duplicate URL',
@@ -323,7 +323,7 @@ describe('Templates.js', function() {
                     let templateController;
                     before(() => {
                         templateController = new Templates('');
-                        templateController.addProvider(`doesn't provide JSON`, {
+                        templateController.addExtension(`doesn't provide JSON`, {
                             getRepositories() {
                                 return [{
                                     url: 'https://www.google.com/',
@@ -338,11 +338,11 @@ describe('Templates.js', function() {
                     });
                 });
             });
-            describe('when providers list valid repos', function() {
+            describe('when extensions list valid repos', function() {
                 let templateController;
                 before(() => {
                     templateController = new Templates('');
-                    templateController.addProvider('valid repo', {
+                    templateController.addExtension('valid repo', {
                         getRepositories() {
                             return [{
                                 url: 'https://raw.githubusercontent.com/kabanero-io/codewind-templates/aad4bafc14e1a295fb8e462c20fe8627248609a3/devfiles/index.json',
@@ -351,7 +351,7 @@ describe('Templates.js', function() {
                         },
                     });
                 });
-                it(`returns the default Codewind templates and the provider's templates`, async function() {
+                it(`returns the default Codewind templates and the extension's templates`, async function() {
                     const output = await templateController.getTemplatesFromRepos(defaultRepoList);
                     output.should.include.deep.members(defaultCodewindTemplates);
                     (output.length).should.be.above(defaultCodewindTemplates.length);
@@ -457,7 +457,315 @@ describe('Templates.js', function() {
             });
         });
     });
-    describe('batchUpdate(requestedOperations)', function() {
+    describe('initializeExtensionSettings()', function() {
+        describe('when the file already exists', function() {
+            let templateController;
+            beforeEach(() => {
+                fs.ensureDirSync(testWorkspaceConfigDir);
+                templateController = new Templates(testWorkspaceDir);
+                fs.writeJSONSync(templateController.extensionSettingsFile, [
+                    {
+                        name: '1',
+                        description: '1',
+                        enabled: true,
+                    },
+                ]);
+                templateController.extensions = {
+                    1: {
+                        enabled: false,
+                    },
+                };
+            });
+            afterEach(() => {
+                fs.removeSync(testWorkspaceDir);
+            });
+            it(`correctly reads the extension settings file`, async function() {
+                await templateController.initializeExtensionSettings();
+
+                templateController.extensions.should.deep.equal({
+                    1: {
+                        enabled: true,
+                    },
+                });
+            });
+        });
+        describe(`when the file doesn't already exist`, function() {
+            let templateController;
+            beforeEach(() => {
+                fs.ensureDirSync(testWorkspaceConfigDir);
+                templateController = new Templates(testWorkspaceDir);
+                templateController.extensions = {
+                    1: {
+                        enabled: false,
+                    },
+                };
+            });
+            afterEach(() => {
+                fs.removeSync(testWorkspaceDir);
+            });
+            it(`correctly reads the extension settings file`, async function() {
+                await templateController.initializeExtensionSettings();
+
+                const settingsFile = fs.readJSONSync(templateController.extensionSettingsFile);
+                settingsFile.should.deep.equal([
+                    {
+                        name: '1',
+                        description: '1',
+                        enabled: false,
+                    },
+                ]);
+            });
+
+
+        });
+    });
+
+    describe('batchUpdateExtensions(requestedOperations)', function() {
+        const tests = {
+            'enable 2 existing extensions': {
+                input: [
+                    {
+                        op: 'enable',
+                        name: '1',
+                        value: 'true',
+                    },
+                    {
+                        op: 'enable',
+                        name: '2',
+                        value: 'true',
+                    },
+                ],
+                output: [
+                    {
+                        status: 200,
+                        requestedOperation: {
+                            op: 'enable',
+                            name: '1',
+                            value: 'true',
+                        },
+                    },
+                    {
+                        status: 200,
+                        requestedOperation: {
+                            op: 'enable',
+                            name: '2',
+                            value: 'true',
+                        },
+                    },
+                ],
+                expectedExtensionDetails: [
+                    {
+                        name: '1',
+                        description: '1',
+                        enabled: true,
+                    },
+                    {
+                        name: '2',
+                        description: '2',
+                        enabled: true,
+                    },
+                ],
+            },
+            'disable 2 existing extensions': {
+                input: [
+                    {
+                        op: 'enable',
+                        name: '1',
+                        value: 'false',
+                    },
+                    {
+                        op: 'enable',
+                        name: '2',
+                        value: 'false',
+                    },
+                ],
+                output: [
+                    {
+                        status: 200,
+                        requestedOperation: {
+                            op: 'enable',
+                            name: '1',
+                            value: 'false',
+                        },
+                    },
+                    {
+                        status: 200,
+                        requestedOperation: {
+                            op: 'enable',
+                            name: '2',
+                            value: 'false',
+                        },
+                    },
+                ],
+                expectedExtensionDetails: [
+                    {
+                        name: '1',
+                        description: '1',
+                        enabled: false,
+                    },
+                    {
+                        name: '2',
+                        description: '2',
+                        enabled: false,
+                    },
+                ],
+            },
+            'enable an unknown extension': {
+                input: [
+                    {
+                        op: 'enable',
+                        name: '1',
+                        value: 'false',
+                    },
+                    {
+                        op: 'enable',
+                        name: '2',
+                        value: 'false',
+                    },
+                ],
+                output: [
+                    {
+                        status: 200,
+                        requestedOperation: {
+                            op: 'enable',
+                            name: '1',
+                            value: 'false',
+                        },
+                    },
+                    {
+                        status: 200,
+                        requestedOperation: {
+                            op: 'enable',
+                            name: '2',
+                            value: 'false',
+                        },
+                    },
+                ],
+                expectedExtensionDetails: [
+                    {
+                        name: '1',
+                        description: '1',
+                        enabled: false,
+                    },
+                    {
+                        name: '2',
+                        description: '2',
+                        enabled: false,
+                    },
+                ],
+            },
+            'enable an unknown extension': {
+                input: [
+                    {
+                        op: 'enable',
+                        name: 'unknownExtensionName',
+                        value: 'true',
+                    },
+                ],
+                output: [
+                    {
+                        status: 404,
+                        error: 'Unknown extension name',
+                        requestedOperation: {
+                            op: 'enable',
+                            name: 'unknownExtensionName',
+                            value: 'true',
+                        },
+                    },
+                ],
+            },
+            'disable an unknown extension': {
+                input: [
+                    {
+                        op: 'enable',
+                        name: 'unknownExtensionName',
+                        value: 'false',
+                    },
+                ],
+                output: [
+                    {
+                        status: 404,
+                        error: 'Unknown extension name',
+                        requestedOperation: {
+                            op: 'enable',
+                            name: 'unknownExtensionName',
+                            value: 'false',
+                        },
+                    },
+                ],
+            },
+            'disable an existing extension and an unknown extension': {
+                input: [
+                    {
+                        op: 'enable',
+                        name: '1',
+                        value: 'false',
+                    },
+                    {
+                        op: 'enable',
+                        name: 'unknownExtensionName',
+                        value: 'false',
+                    },
+                ],
+                output: [
+                    {
+                        status: 200,
+                        requestedOperation: {
+                            op: 'enable',
+                            name: '1',
+                            value: 'false',
+                        },
+                    },
+                    {
+                        status: 404,
+                        error: 'Unknown extension name',
+                        requestedOperation: {
+                            op: 'enable',
+                            name: 'unknownExtensionName',
+                            value: 'false',
+                        },
+                    },
+                ],
+                expectedExtensionDetails: [
+                    {
+                        name: '1',
+                        description: '1',
+                        enabled: false,
+                    },
+                ],
+            },
+        };
+        let templateController;
+        beforeEach(() => {
+            fs.ensureDirSync(testWorkspaceConfigDir);
+            templateController = new Templates(testWorkspaceDir);
+            templateController.extensions = {
+                1: {
+                    enabled: true,
+                },
+                2: {
+                    enabled: false,
+                },
+            };
+        });
+        afterEach(() => {
+            fs.removeSync(testWorkspaceDir);
+        });
+        for (const [testName, test] of Object.entries(tests)) {
+            describe(testName, function() { // eslint-disable-line no-loop-func
+                it(`returns the expected operation info and correctly updates the extension settings file`, async function() {
+                    const output = await templateController.batchUpdateExtensions(test.input);
+                    output.should.deep.equal(test.output);
+
+                    if (test.expectedExtensionDetails) {
+                        const extensionSettingsFile = fs.readJsonSync(templateController.extensionSettingsFile);
+                        extensionSettingsFile.should.include.deep.members(test.expectedExtensionDetails);
+                    }
+                });
+            });
+        }
+    });
+    describe('batchUpdateRepos(requestedOperations)', function() {
         let templateController;
         beforeEach(() => {
             fs.ensureDirSync(testWorkspaceConfigDir);
@@ -685,7 +993,7 @@ describe('Templates.js', function() {
             for (const [testName, test] of Object.entries(tests)) {
                 describe(testName, function() { // eslint-disable-line no-loop-func
                     it(`returns the expected operation info and correctly updates the repository file`, async function() {
-                        const output = await templateController.batchUpdate(test.input);
+                        const output = await templateController.batchUpdateRepos(test.input);
                         output.should.deep.equal(test.output);
 
                         if (test.expectedRepoDetails) {
@@ -697,7 +1005,7 @@ describe('Templates.js', function() {
             }
         });
     });
-    describe('performOperation(operation)', function() {
+    describe('operateOnRepo(operation)', function() {
         let templateController;
         beforeEach(() => {
             templateController = new Templates('');
@@ -749,7 +1057,7 @@ describe('Templates.js', function() {
             for (const [testName, test] of Object.entries(tests)) {
                 describe(testName, function() { // eslint-disable-line no-loop-func
                     it(`returns the expected operation info and correctly updates the repository file`, function() {
-                        const output = templateController.performOperation(test.input);
+                        const output = templateController.operateOnRepo(test.input);
                         output.should.deep.equal(test.output);
                     });
                 });
@@ -793,24 +1101,24 @@ describe('Templates.js', function() {
             for (const [testName, test] of Object.entries(tests)) {
                 describe(testName, function() { // eslint-disable-line no-loop-func
                     it(`returns the expected operation info`, function() {
-                        const output = templateController.performOperation(test.input);
+                        const output = templateController.operateOnRepo(test.input);
                         output.should.deep.equal(test.output);
                     });
                 });
             }
         });
     });
-    describe('addProvider(name, provider)', function() {
+    describe('addExtension(name, extension)', function() {
         describe('invalid args', function() {
-            describe('invalid provider type', function() {
+            describe('invalid extension type', function() {
                 describe('empty object', function() {
-                    it('ignores the invalid provider', function() {
+                    it('ignores the invalid extension', function() {
                         const templateController = new Templates('');
-                        const originalProviders = { ...templateController.providers };
+                        const originalExtensions = { ...templateController.extensions };
 
-                        templateController.addProvider('empty obj', {});
+                        templateController.addExtension('empty obj', {});
 
-                        templateController.providers.should.deep.equal(originalProviders);
+                        templateController.extensions.should.deep.equal(originalExtensions);
                     });
                 });
             });

@@ -31,49 +31,49 @@ module.exports = class ExtensionList {
   constructor() {
     this._list = {};
   }
-  
+
   /**
    * Install (unzip) built-in extensions that are stored in /extensions to the
    * given target directory
-   * 
-   * @param {string} targetDir, the target directory to install extensions to 
+   *
+   * @param {string} targetDir, the target directory to install extensions to
    */
   async installBuiltInExtensions(targetDir) {
-  
+
     // get the zips from the /extensions directory
     const entries = await fs.readdir(extensionsDir, { withFileTypes: true });
-    
+
     for (let entry of entries) {
-      
-        let match;
-  
-        // look for files with names matching the expected pattern
-        if (entry.isFile() && (match = extensionsPattern.exec(entry.name))) {
-          
-          const name = match[1];
-          const version = match[2];
+      this.hi = 1;
+      let match;
 
-          const source = path.join(extensionsDir, entry.name);
-          const target = path.join(targetDir, name);
-          const targetWithVersion = target + version;
+      // look for files with names matching the expected pattern
+      if (entry.isFile() && (match = extensionsPattern.exec(entry.name))) {
 
-          try {
-            await prepForUnzip(target);
-            await exec(`unzip ${source} -d ${targetDir}`);
+        const name = match[1];
+        const version = match[2];
 
-            // top-level directory in zip will have the version suffix
-            // rename to remove the version
-            await fs.rename(targetWithVersion, target);
-          }
-          catch (err) {
-            log.warn(`Failed to install ${entry.name}`);
-            log.warn(err);
-          }
-          finally {
-            // to be safe, try to remove directory with version name if it still exist
-            await forceRemove(targetWithVersion);
-          }
+        const source = path.join(extensionsDir, entry.name);
+        const target = path.join(targetDir, name);
+        const targetWithVersion = target + version;
+
+        try {
+          await prepForUnzip(target);
+          await exec(`unzip ${source} -d ${targetDir}`);
+
+          // top-level directory in zip will have the version suffix
+          // rename to remove the version
+          await fs.rename(targetWithVersion, target);
         }
+        catch (err) {
+          log.warn(`Failed to install ${entry.name}`);
+          log.warn(err);
+        }
+        finally {
+          // to be safe, try to remove directory with version name if it still exist
+          await forceRemove(targetWithVersion);
+        }
+      }
     }
   }
 
@@ -97,7 +97,7 @@ module.exports = class ExtensionList {
             if (extension.templates) {
               await templates.addRepository(extension.templates, extension.description);
             } else if (extension.templatesProvider) {
-              templates.addProvider(extension.name, extension.templatesProvider);
+              templates.addExtension(extension.name, extension.templatesProvider);
               delete extension.templatesProvider;
             }
           }
@@ -208,7 +208,7 @@ module.exports = class ExtensionList {
 
 /**
  * Force remove a path, regardless of whether it exists, or it's file or directory that may or may not be empty.
- * 
+ *
  * @param {string} path, path to remove
  */
 async function forceRemove(path) {
@@ -223,13 +223,13 @@ async function forceRemove(path) {
 /**
  * Prepare the directory where an extension will be unzipped to. If directory
  * exists with the same name, it will be renamed by appending the "__old" suffix to it.
- * 
+ *
  * @param {string} target, the target directory to unzip to
  */
 async function prepForUnzip(target) {
-  
+
   if (await utils.fileExists(target)) {
-  
+
     const targetOld = target + suffixOld;
 
     // try to remove previous backup that may or may not exist before rename

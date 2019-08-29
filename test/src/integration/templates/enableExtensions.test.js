@@ -11,13 +11,12 @@
 const chai = require('chai');
 
 const {
-    sampleRepos,
     getTemplates,
-    getTemplateRepos,
-    enableTemplateRepos,
-    disableTemplateRepos,
     setTemplateReposTo,
     sampleExtensions,
+    getTemplateExtensions,
+    enableTemplateExtensions,
+    disableTemplateExtensions,
     setTemplateExtensionsTo,
     saveExtensionsBeforeTestAndRestoreAfter,
     saveReposBeforeTestAndRestoreAfter,
@@ -25,83 +24,80 @@ const {
 
 chai.should();
 
-describe('Batch enabling repositories', function() {
+
+describe('Batch enabling extensions', function() {
     const tests = {
-        'multiple repos': {
-            testRepos: [
-                { ...sampleRepos.codewind },
-                { ...sampleRepos.appsody },
-            ],
+        '1 extension': {
+            testExtensions: [{ ...sampleExtensions.appsody }],
         },
     };
 
     for (const [testName, test] of Object.entries(tests)) {
         describe(testName, function() { // eslint-disable-line no-loop-func
-            const { testRepos } = test;
-            let templatesFromTestRepos;
+            const { testExtensions } = test;
+            let templatesFromTestExtensions;
             saveExtensionsBeforeTestAndRestoreAfter();
             saveReposBeforeTestAndRestoreAfter();
             before(async() => {
-                await setTemplateExtensionsTo([{ ...sampleExtensions.appsody }]);
-                await setTemplateReposTo(testRepos);
+                await setTemplateExtensionsTo(testExtensions);
+                await setTemplateReposTo([]);
 
                 const res = await getTemplates();
-                templatesFromTestRepos = res.body;
+                templatesFromTestExtensions = res.body;
             });
-            it(`returns 207 and sub-status 200 for each subrequest when batch disabling ${testRepos.length} repos`, async function() {
-                const repoUrls = testRepos.map(repo => repo.url);
-                const res = await disableTemplateRepos(repoUrls);
+            it(`returns 207 and sub-status 200 for each subrequest when batch disabling ${testExtensions.length} extensions`, async function() {
+                const extensionNames = testExtensions.map(extension => extension.name);
+                const res = await disableTemplateExtensions(extensionNames);
 
                 res.should.have.status(207);
                 res.body.forEach(subResponse =>
                     subResponse.status.should.equal(200)
                 );
             });
-            it(`lists those repos as disabled`, async function() {
-                const disabledRepos = testRepos.map(repo => {
+            it(`lists those extensions as disabled`, async function() {
+                const disabledExtensions = testExtensions.map(extension => {
                     return {
-                        ...repo,
+                        ...extension,
                         enabled: false,
                     };
                 });
 
-                const res = await getTemplateRepos();
+                const res = await getTemplateExtensions();
 
                 res.should.have.status(200);
-                res.body.should.have.deep.members(disabledRepos);
+                res.body.should.have.deep.members(disabledExtensions);
             });
-            it(`checks templates from the disabled repos do not appear in the list of enabled templates`, async function() {
+            it(`checks templates from the disabled extensions do not appear in the list of enabled templates`, async function() {
                 const res = await getTemplates({ showEnabledOnly: true });
-                res.should.have.status(200);
-                res.body.should.not.have.deep.members(templatesFromTestRepos);
+                res.should.have.status(204);
             });
 
-            it(`returns 207 and sub-status 200 for each subrequest when batch enabling ${testRepos.length} repos`, async function() {
-                const repoUrls = testRepos.map(repo => repo.url);
-                const res = await enableTemplateRepos(repoUrls);
+            it(`returns 207 and sub-status 200 for each subrequest when batch enabling ${testExtensions.length} extensions`, async function() {
+                const extensionNames = testExtensions.map(extension => extension.name);
+                const res = await enableTemplateExtensions(extensionNames);
 
                 res.should.have.status(207);
                 res.body.forEach(subResponse =>
                     subResponse.status.should.equal(200)
                 );
             });
-            it(`lists those repos as enabled`, async function() {
-                const enabledRepos = testRepos.map(repo => {
+            it(`lists those extensions as enabled`, async function() {
+                const enabledExtensions = testExtensions.map(extension => {
                     return {
-                        ...repo,
+                        ...extension,
                         enabled: true,
                     };
                 });
 
-                const res = await getTemplateRepos();
+                const res = await getTemplateExtensions();
 
                 res.should.have.status(200);
-                res.body.should.have.deep.members(enabledRepos);
+                res.body.should.have.deep.members(enabledExtensions);
             });
-            it(`checks templates from the enabled repos do appear in the list of enabled templates`, async function() {
+            it(`checks templates from the enabled extensions do appear in the list of enabled templates`, async function() {
                 const res = await getTemplates({ showEnabledOnly: true });
                 res.should.have.status(200);
-                res.body.should.have.deep.members(templatesFromTestRepos);
+                res.body.should.have.deep.members(templatesFromTestExtensions);
             });
         });
     }

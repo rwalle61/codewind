@@ -180,6 +180,22 @@ const sampleRepos = {
 };
 const defaultRepoList = [sampleRepos.codewind];
 
+const sampleExtensions = {
+    appsody: {
+        name: 'appsodyExtension',
+        description: 'appsodyExtension',
+        enabled: true,
+    },
+};
+const defaultExtensions = [sampleExtensions.appsody];
+
+async function getTemplateExtensions() {
+    const res = await reqService.chai
+        .get('/api/v1/templates/extensions')
+        .set('Cookie', ADMIN_COOKIE);
+    return res;
+}
+
 async function getTemplateRepos() {
     const res = await reqService.chai
         .get('/api/v1/templates/repositories')
@@ -203,11 +219,43 @@ async function deleteTemplateRepo(repoUrl) {
     return res;
 }
 
+async function batchPatchTemplateExtensions(operations) {
+    const res = await reqService.chai
+        .patch('/api/v1/batch/templates/extensions')
+        .set('Cookie', ADMIN_COOKIE)
+        .send(operations);
+    return res;
+}
+
 async function batchPatchTemplateRepos(operations) {
     const res = await reqService.chai
         .patch('/api/v1/batch/templates/repositories')
         .set('Cookie', ADMIN_COOKIE)
         .send(operations);
+    return res;
+}
+
+async function enableTemplateExtensions(extensionNames) {
+    const operations = extensionNames.map(name => {
+        return {
+            name,
+            op: 'enable',
+            value: 'true',
+        };
+    });
+    const res = await batchPatchTemplateExtensions(operations);
+    return res;
+}
+
+async function disableTemplateExtensions(extensionNames) {
+    const operations = extensionNames.map(name => {
+        return {
+            name,
+            op: 'enable',
+            value: 'false',
+        };
+    });
+    const res = await batchPatchTemplateExtensions(operations);
     return res;
 }
 
@@ -247,7 +295,7 @@ async function getTemplates(queryParams) {
  * Removes all templates repos known to PFE, and adds the supplied repos
  * @param {[JSON]} repoList
  */
-async function resetTemplateReposTo(repoList) {
+async function setTemplateReposTo(repoList) {
     const reposToDelete = (await getTemplateRepos()).body;
     await Promise.all(reposToDelete.map(repo =>
         deleteTemplateRepo(repo.url)
@@ -257,6 +305,22 @@ async function resetTemplateReposTo(repoList) {
     ));
 }
 
+/**
+ * Enables/disables template extensions in PFE, according to the state of the supplied extensions
+ * @param {[JSON]} extensions
+ */
+async function setTemplateExtensionsTo(extensions) {
+    const operations = extensions.map(extension => {
+        return {
+            name: extension.name,
+            op: 'enable',
+            value: extension.enabled.toString(),
+        };
+    });
+    const res = await batchPatchTemplateExtensions(operations);
+    return res;
+}
+
 async function getTemplateStyles() {
     const res = await reqService.chai
         .get('/api/v1/templates/styles')
@@ -264,19 +328,74 @@ async function getTemplateStyles() {
     return res;
 }
 
+function saveExtensionsBeforeTestAndRestoreAfter() {
+    let originalTemplateExtensions;
+    before(async() => {
+        const res = await getTemplateExtensions();
+        originalTemplateExtensions = res.body;
+    });
+    after(async() => {
+        await setTemplateExtensionsTo(originalTemplateExtensions);
+    });
+}
+
+function saveReposBeforeTestAndRestoreAfter() {
+    let originalTemplateRepos;
+    before(async() => {
+        const res = await getTemplateRepos();
+        originalTemplateRepos = res.body;
+    });
+    after(async() => {
+        await setTemplateReposTo(originalTemplateRepos);
+    });
+}
+
+function saveExtensionsBeforeEachTestAndRestoreAfterEach() {
+    let originalTemplateExtensions;
+    beforeEach(async() => {
+        const res = await getTemplateExtensions();
+        originalTemplateExtensions = res.body;
+    });
+    afterEach(async() => {
+        await setTemplateExtensionsTo(originalTemplateExtensions);
+    });
+}
+
+function saveReposBeforeEachTestAndRestoreAfterEach() {
+    let originalTemplateRepos;
+    beforeEach(async() => {
+        const res = await getTemplateRepos();
+        originalTemplateRepos = res.body;
+    });
+    afterEach(async() => {
+        await setTemplateReposTo(originalTemplateRepos);
+    });
+}
+
 module.exports = {
     defaultTemplates,
     defaultCodewindTemplates,
     styledTemplates,
     sampleRepos,
+    sampleExtensions,
+    defaultExtensions,
     defaultRepoList,
     getTemplateRepos,
+    getTemplateExtensions,
     addTemplateRepo,
     deleteTemplateRepo,
     batchPatchTemplateRepos,
+    batchPatchTemplateExtensions,
     enableTemplateRepos,
     disableTemplateRepos,
+    enableTemplateExtensions,
+    disableTemplateExtensions,
     getTemplates,
-    resetTemplateReposTo,
+    setTemplateReposTo,
+    setTemplateExtensionsTo,
     getTemplateStyles,
+    saveExtensionsBeforeTestAndRestoreAfter,
+    saveExtensionsBeforeEachTestAndRestoreAfterEach,
+    saveReposBeforeTestAndRestoreAfter,
+    saveReposBeforeEachTestAndRestoreAfterEach,
 };

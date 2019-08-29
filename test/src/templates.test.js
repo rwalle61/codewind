@@ -16,13 +16,22 @@ const {
     defaultTemplates,
     defaultRepoList,
     sampleRepos,
+    sampleExtensions,
+    defaultExtensions,
     batchPatchTemplateRepos,
+    batchPatchTemplateExtensions,
     getTemplateRepos,
+    getTemplateExtensions,
     getTemplates,
     addTemplateRepo,
     deleteTemplateRepo,
-    resetTemplateReposTo,
+    setTemplateReposTo,
+    setTemplateExtensionsTo,
     getTemplateStyles,
+    saveExtensionsBeforeTestAndRestoreAfter,
+    saveExtensionsBeforeEachTestAndRestoreAfterEach,
+    saveReposBeforeTestAndRestoreAfter,
+    saveReposBeforeEachTestAndRestoreAfterEach,
 } = require('../modules/template.service');
 const { pathToApiSpec } = require('../config');
 
@@ -30,6 +39,12 @@ chai.should();
 chai.use(chaiResValidator(pathToApiSpec));
 
 describe('Template API tests', function() {
+    saveExtensionsBeforeTestAndRestoreAfter();
+    saveReposBeforeTestAndRestoreAfter();
+    before(async() => {
+        await setTemplateExtensionsTo([{ ...sampleExtensions.appsody }]);
+        await setTemplateReposTo([{ ...sampleRepos.codewind }]);
+    });
     describe('GET /api/v1/templates', function() {
         describe('?projectStyle=', function() {
             describe('empty', function() {
@@ -87,6 +102,16 @@ describe('Template API tests', function() {
         });
     });
 
+    describe('/api/v1/templates/extensions', function() {
+        describe('GET', function() {
+            it('should return a list of template extensions', async function() {
+                const res = await getTemplateExtensions();
+                res.should.have.status(200).and.satisfyApiSpec;
+                res.body.length.should.equal(defaultExtensions.length);
+            });
+        });
+    });
+
     describe('GET|POST|DELETE /api/v1/templates/repositories', function() {
         const repoToDelete = sampleRepos.codewind;
         const repoToAdd = sampleRepos.anotherCodewind;
@@ -100,7 +125,7 @@ describe('Template API tests', function() {
             originalNumTemplates = res2.body.length;
         });
         after(async() => {
-            await resetTemplateReposTo(originalTemplateRepos);
+            await setTemplateReposTo(originalTemplateRepos);
         });
         it('GET should return a list of available template repositories', async function() {
             const res = await getTemplateRepos();
@@ -223,18 +248,88 @@ describe('Template API tests', function() {
                 }],
             },
         };
-        let originalTemplateRepos;
-        beforeEach(async() => {
-            const res = await getTemplateRepos();
-            originalTemplateRepos = res.body;
-        });
-        afterEach(async() => {
-            await resetTemplateReposTo(originalTemplateRepos);
-        });
+        saveReposBeforeEachTestAndRestoreAfterEach();
         for (const [testName, test] of Object.entries(tests)) {
             describe(`to ${testName}`, function() {
                 it(`should return 207 and the expected operations info`, async function() {
                     const res = await batchPatchTemplateRepos(test.input);
+                    res.should.have.status(207).and.satisfyApiSpec;
+                    res.body.should.deep.equal(test.output);
+                });
+            });
+        }
+    });
+    describe('PATCH /api/v1/batch/templates/extensions', function() {
+        const nameOfExistingExtension = 'appsodyExtension';
+        const tests = {
+            'enable an existing extension': {
+                input: [{
+                    op: 'enable',
+                    name: nameOfExistingExtension,
+                    value: 'true',
+                }],
+                output: [{
+                    status: 200,
+                    requestedOperation: {
+                        op: 'enable',
+                        name: nameOfExistingExtension,
+                        value: 'true',
+                    },
+                }],
+            },
+            'disable an existing extension': {
+                input: [{
+                    op: 'enable',
+                    name: nameOfExistingExtension,
+                    value: 'false',
+                }],
+                output: [{
+                    status: 200,
+                    requestedOperation: {
+                        op: 'enable',
+                        name: nameOfExistingExtension,
+                        value: 'false',
+                    },
+                }],
+            },
+            'enable an unknown extension': {
+                input: [{
+                    op: 'enable',
+                    name: 'unknownExtension',
+                    value: 'true',
+                }],
+                output: [{
+                    status: 404,
+                    error: 'Unknown extension name',
+                    requestedOperation: {
+                        op: 'enable',
+                        name: 'unknownExtension',
+                        value: 'true',
+                    },
+                }],
+            },
+            'disable an unknown extension': {
+                input: [{
+                    op: 'enable',
+                    name: 'unknownExtension',
+                    value: 'false',
+                }],
+                output: [{
+                    status: 404,
+                    error: 'Unknown extension name',
+                    requestedOperation: {
+                        op: 'enable',
+                        name: 'unknownExtension',
+                        value: 'false',
+                    },
+                }],
+            },
+        };
+        saveExtensionsBeforeEachTestAndRestoreAfterEach();
+        for (const [testName, test] of Object.entries(tests)) {
+            describe(`to ${testName}`, function() { // eslint-disable-line no-loop-func
+                it(`should return 207 and the expected operations info`, async function() {
+                    const res = await batchPatchTemplateExtensions(test.input);
                     res.should.have.status(207).and.satisfyApiSpec;
                     res.body.should.deep.equal(test.output);
                 });

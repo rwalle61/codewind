@@ -88,7 +88,15 @@ router.patch('/api/v1/batch/templates/repositories', validateReq, async (req, re
   const user = req.cw_user;
   const templateController = user.templates;
   const requestedOperations = req.body;
-  const operationResults = await templateController.batchUpdate(requestedOperations);
+  const operationResults = await templateController.batchUpdateRepos(requestedOperations);
+  res.status(207).json(operationResults);
+});
+
+router.patch('/api/v1/batch/templates/extensions', validateReq, async (req, res) => {
+  const user = req.cw_user;
+  const templateController = user.templates;
+  const requestedOperations = req.body;
+  const operationResults = await templateController.batchUpdateExtensions(requestedOperations);
   res.status(207).json(operationResults);
 });
 
@@ -100,6 +108,18 @@ router.get('/api/v1/templates/styles', validateReq, async (req, res, _next) => {
   const templateController = user.templates;
   const styles = await templateController.getTemplateStyles();
   res.status(200).json(styles);
+});
+
+/**
+ * API Function to return a list of available template extensions
+ * @return {[JSON]}
+ */
+router.get('/api/v1/templates/extensions', validateReq, async (req, res, _next) => {
+  const user = req.cw_user;
+  const templateController = user.templates;
+
+  const extensions = await templateController.getTemplateExtensions();
+  res.status(200).json(extensions);
 });
 
 module.exports = router;

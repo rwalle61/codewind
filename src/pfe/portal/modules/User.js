@@ -53,7 +53,7 @@ module.exports = class User {
     }
     this.secure = true;
   }
-  
+
   /**
    * Function to initialise a user
    * Runs functions to create the user directories, start existing projects
@@ -77,7 +77,7 @@ module.exports = class User {
       await this.initialiseExistingProjects();
 
       this.templates = new Templates(this.workspace);
-      await this.templates.initializeRepositoryList();
+      await this.templates.initialize();
 
       // Create the list of codewind extensions
       this.extensionList = new ExtensionList();

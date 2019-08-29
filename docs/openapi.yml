@@ -952,7 +952,7 @@ paths:
           description: Bad request
   /api/v1/batch/templates/repositories:
     patch:
-      summary: Batch change settings for a template repository of which Codewind is aware
+      summary: Batch change settings for template repositories of which Codewind is aware
       requestBody:
         description: repository settings
         content:
@@ -980,6 +980,48 @@ paths:
                       $ref: '#/components/schemas/TemplateRepoSetting'
                     error:
                       type: string
+  /api/v1/batch/templates/extensions:
+    patch:
+      summary: Batch change settings for template extensions of which Codewind is aware
+      requestBody:
+        description: extension settings
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/TemplateExtensionSetting'
+      responses:
+        207:
+          description: Returns success/failure statuses of settings operations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  required:
+                    - status
+                    - requestedOperation
+                  properties:
+                    status:
+                      type: integer
+                    requestedOperation:
+                      $ref: '#/components/schemas/TemplateExtensionSetting'
+                    error:
+                      type: string
+  /api/v1/templates/extensions:
+    get:
+      summary: List all template extensions of which Codewind is aware
+      responses:
+        200:
+          description: Returns all the extensions that Codewind will use to find templates
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TemplateExtension'
   /api/v1/templates/styles:
     get:
       summary: List all project styles for which Codewind has templates
@@ -1368,6 +1410,18 @@ components:
           type: string
         enabled:
           type: boolean
+    TemplateExtension:
+      type: object
+      required:
+        - name
+        - description
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        enabled:
+          type: boolean
     TemplateRepoSetting:
       type: object
       required:
@@ -1383,6 +1437,24 @@ components:
           description: url of the modified template repository
           type: string
           example: https://raw.githubusercontent.com/kabanero-io/codewind-templates/master/devfiles/index.json
+        value:
+          type: string
+          example: 'true'
+    TemplateExtensionSetting:
+      type: object
+      required:
+        - op
+        - name
+        - value
+      properties:
+        op:
+          description: extension setting to change
+          type: string
+          enum: [enable]
+        name:
+          description: name of the modified template extension
+          type: string
+          example: AppsodyExtension
         value:
           type: string
           example: 'true'
