@@ -1,0 +1,3 @@
+[submodule "src/performance/monitor/public/graphmetrics"]
+	path = src/performance/monitor/public/graphmetrics
+	url = https://github.com/RuntimeTools/graphmetrics
