@@ -3,7 +3,7 @@ const pfeOrigin = document.location.origin;
 const pollInterval = 2000;
 
 // TODO: reset
-const maxPolls = 10;
+const maxPolls = 100;
 const maxFlameGraphUpdates = 50;
 
 function pollMetricsAndUpdateDash(numPolls, funcToUpdateDash) {

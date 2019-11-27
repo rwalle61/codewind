@@ -232,13 +232,17 @@ router.post('/api/v1/projects/:id/upload/end', async (req, res) => {
         );
         res.sendStatus(200);
 
-        try {
-          await metricsService.injectMetricsCollectorIntoProject(project.projectType, pathToTempProj);
-        } catch (error) {
-          log.warn(error);
-        }
-
         await syncToBuildContainer(project, filesToDelete, pathToTempProj, modifiedList, timeStamp, IFileChangeEvent, user, projectID);
+
+        // add metrics if required
+
+        if (project.injectMetrics) {
+          try {
+            await metricsService.injectMetricsCollectorIntoProject(project.projectType, path.join(project.workspace, project.directory));
+          } catch (error) {
+            log.warn(error);
+          }
+        }
 
         timersyncend = Date.now();
         let timersynctime = (timersyncend - timersyncstart) / 1000;
@@ -392,14 +396,18 @@ async function bindEnd(req, res) {
 
     const pathToCopy = path.join(global.codewind.CODEWIND_WORKSPACE, global.codewind.CODEWIND_TEMP_WORKSPACE, project.name);
 
-    try {
-      await metricsService.injectMetricsCollectorIntoProject(project.projectType, pathToCopy);
-    } catch (error) {
-      log.warn(error);
-    }
-
     // now move temp project to real project
     await cwUtils.copyProject(pathToCopy, path.join(project.workspace, project.directory), getMode(project));
+
+    // add metrics if required
+
+    if (project.injectMetrics) {
+      try {
+        await metricsService.injectMetricsCollectorIntoProject(project.projectType, path.join(project.workspace, project.directory));
+      } catch (error) {
+        log.warn(error);
+      }
+    }
 
     // debug logic to identify bind time
     timerbindend = Date.now();
