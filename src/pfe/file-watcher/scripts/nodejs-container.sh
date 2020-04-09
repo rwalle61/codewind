@@ -153,26 +153,7 @@ function deployK8s() {
 			helm delete $project
 		fi
 
-		echo "$BUILD_IMAGE_INPROGRESS_MSG $projectName"
-		$util updateBuildState $PROJECT_ID $BUILD_STATE_INPROGRESS "buildscripts.buildImage"
-
-		echo -e "Touching docker container build log file: "$LOG_FOLDER/$DOCKER_BUILD.log""
-		touch "$LOG_FOLDER/$DOCKER_BUILD.log"
-		echo -e "Triggering log file event for: docker container build log"
- 		$util newLogFileAvailable $PROJECT_ID "build"
-
-		echo -e "Docker build log file "$LOG_FOLDER/$DOCKER_BUILD.log""
-		$IMAGE_COMMAND $BUILD_COMMAND -t $project . |& tee "$LOG_FOLDER/$DOCKER_BUILD.log"
-		exitCode=$?
-		imageLastBuild=$(($(date +%s)*1000))
-		if [ $exitCode -eq 0 ]; then
-			echo "Docker build successful for $projectName"
-			$util updateBuildState $PROJECT_ID $BUILD_STATE_SUCCESS " " "$imageLastBuild"
-		else
-			echo "$BUILD_IMAGE_FAILED_MSG $projectName" >&2
-			$util updateBuildState $PROJECT_ID $BUILD_STATE_FAILED "buildscripts.buildFail"
-			exit 3
-		fi
+		modifyDockerfileAndBuild
 
 		# Tag and push the image to the registry
 		$IMAGE_COMMAND push --tls-verify=false $project $IMAGE_PUSH_REGISTRY/$project
@@ -191,26 +172,7 @@ function deployK8s() {
 			--install \
 			--recreate-pods
 	else
-		echo "$BUILD_IMAGE_INPROGRESS_MSG $projectName"
-		$util updateBuildState $PROJECT_ID $BUILD_STATE_INPROGRESS "buildscripts.buildImage"
-
-		echo -e "Touching docker container build log file: "$LOG_FOLDER/$DOCKER_BUILD.log""
-		touch "$LOG_FOLDER/$DOCKER_BUILD.log"
-		echo -e "Triggering log file event for: docker container build log"
- 		$util newLogFileAvailable $PROJECT_ID "build"
-
-		echo -e "Docker build log file "$LOG_FOLDER/$DOCKER_BUILD.log""
-		$IMAGE_COMMAND $BUILD_COMMAND -t $project . |& tee "$LOG_FOLDER/$DOCKER_BUILD.log"
-		exitCode=$?
-		imageLastBuild=$(($(date +%s)*1000))
-		if [ $exitCode -eq 0 ]; then
-			echo "Docker build successful for $projectName"
-			$util updateBuildState $PROJECT_ID $BUILD_STATE_SUCCESS " " "$imageLastBuild"
-		else
-			echo "$BUILD_IMAGE_FAILED_MSG $projectName" >&2
-			$util updateBuildState $PROJECT_ID $BUILD_STATE_FAILED "buildscripts.buildFail"
-			exit 3
-		fi
+		modifyDockerfileAndBuild
 		helm upgrade $project $tmpChart \
 			--install $project \
 			--recreate-pods
@@ -254,7 +216,6 @@ function deployK8s() {
 
 	local podName
 	podName=$(getNameOfRunningProjectPod "$project")
-	kubectl cp /file-watcher/scripts/nodejsScripts "$podName":/scripts
 	kubectl exec "$podName" -- /scripts/noderun.sh start false "$START_MODE" "$HOST_OS"
 
 	echo -e "Touching application log file: "$LOG_FOLDER/$APP_LOG.log""
@@ -299,26 +260,7 @@ function dockerRun() {
 }
 
 function deployLocal() {
-	echo "$BUILD_IMAGE_INPROGRESS_MSG $projectName"
-	$util updateBuildState $PROJECT_ID $BUILD_STATE_INPROGRESS "buildscripts.buildImage"
-
-	echo -e "Touching docker container build log file: "$LOG_FOLDER/$DOCKER_BUILD.log""
-	touch "$LOG_FOLDER/$DOCKER_BUILD.log"
-	echo -e "Triggering log file event for: docker container build log"
- 	$util newLogFileAvailable $PROJECT_ID "build"
-
-	echo -e "Docker build log file "$LOG_FOLDER/$DOCKER_BUILD.log""
-	$IMAGE_COMMAND $BUILD_COMMAND -t $project . |& tee "$LOG_FOLDER/$DOCKER_BUILD.log"
-
-	exitCode=$?
-	imageLastBuild=$(($(date +%s)*1000))
-	if [ $exitCode -eq 0 ]; then
-		echo "$BUILD_IMAGE_SUCCESS_MSG $projectName"
-	else
-		echo "$BUILD_IMAGE_FAILED_MSG $projectName" >&2
-		$util updateBuildState $PROJECT_ID $BUILD_STATE_FAILED "buildscripts.buildFail"
-		exit 3
-	fi
+	modifyDockerfileAndBuild
 
 	echo "$project container does not exist. Starting container for $project..."
 	dockerRun
@@ -341,7 +283,6 @@ function deployLocal() {
 		fi
 	fi
 
-	$IMAGE_COMMAND cp /file-watcher/scripts/nodejsScripts $project:/scripts
 	$IMAGE_COMMAND exec $project /scripts/noderun.sh start $AUTO_BUILD_ENABLED $START_MODE $HOST_OS
 	if [ $? -eq 0 ]; then
 		# The build is now complete so send a success event
@@ -382,6 +323,48 @@ function clearNodeCache() {
 	packageJsonHash=$(sha256sum $packageJson)
 	nodemonJsonHash=$(sha256sum $nodemonJson)
 	$cacheUtil "$PROJECT_ID" update $packageJsonKey "$packageJsonHash" $nodemonJsonKey "$nodemonJsonHash"
+}
+
+function modifyDockerfileAndBuild() {
+	# Copy contents of the app dir to a temp folder
+	mkdir -p /tmp/$project-build
+	cp -rf * /tmp/$project-build
+	cp .npmrc /tmp/$project-build
+
+	# Copy the scripts we need over
+	cp -rf /file-watcher/scripts/nodejsScripts/. /tmp/$project-build/scripts
+
+	cd /tmp/$project-build
+
+	# Construct the dockerfile to build the app image
+	cat Dockerfile Dockerfile-build scripts/Dockerfile-dev-setup-nodejs > Dockerfile-$project
+
+	# Build the docker image
+	echo "$BUILD_IMAGE_INPROGRESS_MSG $projectName"
+	$util updateBuildState $PROJECT_ID $BUILD_STATE_INPROGRESS "buildscripts.buildImage"
+
+	echo -e "Touching docker container build log file: "$LOG_FOLDER/$DOCKER_BUILD_LOG.log""
+	touch "$LOG_FOLDER/$DOCKER_BUILD_LOG.log"
+	echo -e "Triggering log file event for: docker container build log"
+ 	$util newLogFileAvailable $PROJECT_ID "build"
+
+	echo -e "Docker build log file "$LOG_FOLDER/$DOCKER_BUILD_LOG.log""
+	$IMAGE_COMMAND $BUILD_COMMAND -t $project -f Dockerfile-$project /tmp/$project-build |& tee "$LOG_FOLDER/$DOCKER_BUILD_LOG.log"
+	exitCode=$?
+
+	# The last image build timestamp
+	imageLastBuild=$(($(date +%s)*1000))
+	if [ $exitCode -eq 0 ]; then
+		echo "Docker build successful for $projectName"
+		$util updateBuildState $PROJECT_ID $BUILD_STATE_SUCCESS " " "$imageLastBuild"
+	else
+		echo "$BUILD_IMAGE_FAILED_MSG $projectName" >&2
+		$util updateBuildState $PROJECT_ID $BUILD_STATE_FAILED "buildscripts.buildFail"
+		exit 3
+	fi
+
+	cd "$ROOT"
+	rm -rf /tmp/$project-build
 }
 
 # Create the application image and container and start it
@@ -478,7 +461,6 @@ elif [ "$COMMAND" == "stop" ]; then
 	echo "Stopping node.js project $projectName"
 	if [[ "$IN_K8" == "true" ]]; then
 		POD_NAME=$(getNameOfRunningProjectPod "$project")
-		kubectl cp /file-watcher/scripts/nodejsScripts/ "$POD_NAME":/scripts
 		kubectl exec "$POD_NAME" -- /scripts/noderun.sh stop
 	else
 		$IMAGE_COMMAND exec "$project" /scripts/noderun.sh stop
@@ -491,7 +473,6 @@ elif [ "$COMMAND" == "start" ]; then
 	clearNodeCache
 	if [[ "$IN_K8" == "true" ]]; then
 		POD_NAME=$(getNameOfRunningProjectPod "$project")
-		kubectl cp /file-watcher/scripts/nodejsScripts/ "$POD_NAME":/scripts
 		kubectl exec "$POD_NAME" -- /scripts/noderun.sh start false "$START_MODE" "$HOST_OS"
 	else
 		$IMAGE_COMMAND exec "$project" /scripts/noderun.sh start "$AUTO_BUILD_ENABLED" "$START_MODE" "$HOST_OS"
